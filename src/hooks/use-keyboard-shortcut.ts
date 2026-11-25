@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useSyncExternalStore } from "react";
 
 export interface KeyboardShortcut {
   /** `KeyboardEvent.key`, case-insensitive: "k", "Enter", "Escape", "/". */
@@ -67,6 +67,16 @@ export function useKeyboardShortcut(
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [key, mod, shift, alt, enabled, allowInInputs, preventDefault]);
+}
+
+const noopSubscribe = () => () => {};
+
+/**
+ * True on macOS/iOS. False during prerender and hydration (so shortcut hints render
+ * "Ctrl" first and switch to "⌘" after hydration, without a mismatch).
+ */
+export function useIsApplePlatform(): boolean {
+  return useSyncExternalStore(noopSubscribe, isApplePlatform, () => false);
 }
 
 /** Label for shortcut hints: "⌘K" on Apple devices, "Ctrl K" elsewhere. Client-only. */

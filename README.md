@@ -9,7 +9,7 @@ Sandrone is a frontend base template built on Next.js (App Router) and TypeScrip
 
 Every part of the template is plain, editable code owned by the developer: no forced SDK, no black-box abstractions.
 
-> **Status:** in development, phase 2 of 5 complete. See [docs/ROADMAP.md](docs/ROADMAP.md).
+> **Status:** in development, phase 3 of 5 complete. See [docs/ROADMAP.md](docs/ROADMAP.md).
 
 ## Technical Specifications
 
@@ -46,22 +46,28 @@ sandrone/
 │   └── build.mjs            # Cross-platform build for each BUILD_OUTPUT mode
 ├── src/
 │   ├── app/                 # Routes. Layouts and pages are Server Components by default
-│   │   ├── (auth)/          # [Phase 3] Minimal centered layout: login, forgot password
-│   │   ├── (dashboard)/     # [Phase 3] ERP/SaaS shell: sidebar, topbar, breadcrumbs, Cmd+K
-│   │   ├── (kiosk)/         # [Phase 3] Fullscreen, touch-friendly shell
+│   │   ├── (auth)/          # Minimal centered layout: /login, /forgot-password
+│   │   ├── (dashboard)/     # ERP/SaaS shell: sidebar, topbar, breadcrumbs, Cmd+K (/dashboard, /items)
+│   │   ├── (kiosk)/         # Fullscreen, touch-friendly shell (/kiosk)
+│   │   ├── error.tsx        # Error boundary; global-error.tsx and not-found.tsx alongside
 │   │   ├── globals.css      # Design tokens, density/touch modes, custom utilities
-│   │   └── layout.tsx       # Root layout with AppProviders
+│   │   ├── layout.tsx       # Root layout with AppProviders
+│   │   └── page.tsx         # Sends "/" to the user's first allowed page, or to login
 │   ├── components/
 │   │   ├── ui/              # shadcn/ui primitives (edit them directly)
 │   │   ├── data-table/      # [Phase 4] TanStack Table engine with URL sync
-│   │   ├── layout/          # Sidebar, topbar, command palette, theme toggle
-│   │   ├── guards/          # [Phase 3] AuthGuard, PermissionGuard
+│   │   ├── layout/          # Dashboard/kiosk shells, sidebar, topbar, command palette
+│   │   ├── guards/          # AuthGuard, GuestGuard, PermissionGuard, AccessDenied
 │   │   └── shared/          # [Phase 4] ConfirmDialog, EmptyState, PageHeader, StatCard
-│   ├── config/              # env.ts (Zod-validated env), site.ts, navigation.ts
-│   ├── features/            # [Phase 5] Domain modules: auth, items, kiosk
-│   ├── hooks/               # useDebounce, useMediaQuery, useKeyboardShortcut, useIsMobile
+│   ├── config/              # env.ts (Zod-validated env), site.ts, navigation.ts (menu + access rules)
+│   ├── features/
+│   │   ├── auth/            # Session store, login/logout hooks, API, schemas, forms, mock handlers
+│   │   ├── items/           # [Phase 5] Reference CRUD module
+│   │   └── kiosk/           # [Phase 5] Reference kiosk/POS module
+│   ├── hooks/               # useDebounce, useMediaQuery, useKeyboardShortcut, usePersistedState, ...
 │   ├── lib/                 # api-client, permissions, query-client, utils
-│   ├── providers/           # AppProviders: theme, nuqs, React Query, toaster
+│   ├── mocks/               # In-browser mock backend used when NEXT_PUBLIC_ENABLE_MOCK_API=true
+│   ├── providers/           # AppProviders: theme, nuqs, React Query, tooltips, toaster, API setup
 │   └── types/               # Shared API contracts: PaginatedResponse<T>, ListParams, ...
 ├── .env.example             # Environment variables template
 ├── components.json          # shadcn/ui CLI configuration
@@ -112,7 +118,15 @@ To add a variable, update three places: `.env.example`, `schema` and `runtimeEnv
 npm run dev
 ```
 
-Open `http://localhost:3000`.
+Open `http://localhost:3000`. With the mock API on (the default), sign in with one of the demo accounts; the login page also offers them as one-click buttons. The password for every account is `password`.
+
+| Name             | Account                   | Role    | Can open                      |
+| ---------------- | ------------------------- | ------- | ----------------------------- |
+| Hanashiro Yuriku | `admin@seleniasync.com`   | admin   | Everything (`*`), two tenants |
+| Yuriku           | `manager@seleniasync.com` | manager | Dashboard, Items, Kiosk       |
+| Riku             | `cashier@seleniasync.com` | cashier | Items (read-only), Kiosk      |
+
+Set `NEXT_PUBLIC_ENABLE_MOCK_API=false` to sign in against your real backend instead.
 
 ## Build Modes
 
@@ -128,12 +142,12 @@ Core template features run in **every** mode: auth/RBAC guards run on the client
 
 ### Deployment
 
-| Target                    | Steps                                                                                                          |
-| ------------------------- | -------------------------------------------------------------------------------------------------------------- |
-| **Vercel / Next.js host** | Connect the repository; the platform runs `npm run build`. Set the `NEXT_PUBLIC_*` variables in its dashboard. |
-| **Node.js server**        | `npm run build`, then `npm start` (set the port with `PORT`).                                                  |
-| **Docker / self-hosting** | `npm run build:standalone`, copy `.next/standalone` to the server, run `node server.js`.                       |
-| **Static hosting**        | `npm run build:export`, upload the contents of `out/`.                                                         |
+| Target                    | Steps                                                                                                                                      |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Vercel / Next.js host** | Connect the repository; the platform runs `npm run build`. Set the `NEXT_PUBLIC_*` variables in its dashboard.                             |
+| **Node.js server**        | `npm run build`, then `npm start` (set the port with `PORT`).                                                                              |
+| **Docker / self-hosting** | `npm run build:standalone`, copy `.next/standalone` to the server, run `node server.js`.                                                   |
+| **Static hosting**        | `npm run build:export` (not a plain `next build`, see [ARCHITECTURE](docs/ARCHITECTURE.md#known-pitfalls)), upload the contents of `out/`. |
 
 The [deploy/](deploy/) folder holds optional host-specific config, such as [deploy/iis/web.config](deploy/iis/web.config) (copy it into `out/` when hosting a static export on IIS). Delete the folder if you don't need it.
 
@@ -190,6 +204,29 @@ import { canAccess, hasPermission } from "@/lib/permissions";
 hasPermission(user, "items.delete");
 canAccess(user, { anyPermission: ["items.update", "items.delete"], roles: ["admin"] });
 ```
+
+In components, use the guards and hooks built on top of it:
+
+```tsx
+import { AccessDenied } from "@/components/guards/access-denied";
+import { PermissionGuard } from "@/components/guards/permission-guard";
+import { useCan } from "@/features/auth/hooks";
+
+// Guard a whole page (hiding the menu entry alone doesn't stop direct URLs)
+<PermissionGuard permission="reports.read" fallback={<AccessDenied />}>
+  <ReportsView />
+</PermissionGuard>
+
+// Hide a single control
+<PermissionGuard permission="items.create">
+  <Button>New item</Button>
+</PermissionGuard>
+
+// Or branch in code
+const canDelete = useCan({ permission: "items.delete" });
+```
+
+To add a page to the menu, add an entry with an `access` rule to `src/config/navigation.ts`; the sidebar, breadcrumbs, command palette and post-login redirect pick it up.
 
 ### Query Feedback
 

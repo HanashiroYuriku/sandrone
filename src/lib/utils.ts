@@ -57,7 +57,7 @@ export function formatDateTime(value: DateInput): string {
   return formatDate(value, { dateStyle: "medium", timeStyle: "short" });
 }
 
-/** "Budi Santoso" → "BS", for avatar fallbacks. */
+/** "Hanashiro Yuriku" → "HY", for avatar fallbacks. */
 export function getInitials(name: string, max = 2): string {
   return name
     .trim()
